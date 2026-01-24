@@ -12,6 +12,12 @@ class AuthController extends Controller
 {
     public function showLogin()
     {
+        if (Session::has('is_login')) {
+            if (Session::get('role') == 'Pembeli') {
+                return redirect('/home');
+            }
+            return redirect('/admin/dashboard');
+        }
         return view('auth.login');
     }
 

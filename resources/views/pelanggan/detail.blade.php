@@ -6,7 +6,7 @@
         <div class="row">
             <div class="col-md-4">
                 @if($produk->foto_produk)
-                    <img src="{{ asset('storage/' . $produk->foto_produk) }}" class="img-fluid rounded">
+                    <img src="{{ asset('images/' . $produk->foto_produk) }}" class="img-fluid rounded">
                 @else
                     <div class="bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 300px;">
                         No Image

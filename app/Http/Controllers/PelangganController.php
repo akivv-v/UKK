@@ -28,7 +28,7 @@ class PelangganController extends Controller
         $produk = Produk::findOrFail($id);
         $cart = session()->get('cart', []);
 
-        if(isset($cart[$id])) {
+        if (isset($cart[$id])) {
             $cart[$id]['quantity']++;
         } else {
             $cart[$id] = [
@@ -53,23 +53,22 @@ class PelangganController extends Controller
     {
         $request->validate([
             'id_ongkir' => 'required',
-            'metode_pembayaran' => 'required' // Simplified payment, just selection
+            'metode_pembayaran' => 'required',
+            'bukti_pembayaran' => 'nullable|image'
         ]);
 
         $cart = session('cart');
-        if (!$cart) {
-            return back()->with('error', 'Keranjang kosong');
-        }
+        if (!$cart) return back();
 
+        // Hitung Total
         $totalBelanja = 0;
-        foreach ($cart as $id => $details) {
+        foreach ($cart as $details) {
             $totalBelanja += $details['price'] * $details['quantity'];
         }
-
         $ongkir = OngkosKirim::find($request->id_ongkir);
         $totalBayar = $totalBelanja + ($ongkir ? $ongkir->biaya : 0);
 
-        // Buat Transaksi
+        // 1. Simpan Transaksi Utama
         $transaksi = Transaksi::create([
             'tanggaltransaksi' => now(),
             'id_pelanggan' => session('id_pelanggan'),
@@ -78,7 +77,7 @@ class PelangganController extends Controller
             'keterangan' => 'diproses'
         ]);
 
-        // Detail Transaksi
+        // 2. Simpan Detail & Kurangi Stok
         foreach ($cart as $id => $details) {
             DetailTransaksi::create([
                 'id_transaksi' => $transaksi->id_transaksi,
@@ -87,32 +86,35 @@ class PelangganController extends Controller
                 'jumlah_produk' => $details['quantity'],
                 'subtotal' => $details['price'] * $details['quantity']
             ]);
-            
-            // Kurangi Stok (Simple)
-            $produk = Produk::find($id);
-            if($produk) {
-                $produk->decrement('stok', $details['quantity']);
-            }
+            Produk::find($id)->decrement('stok', $details['quantity']);
         }
 
-        // Simpan Pembayaran (disederhanakan, langsung created)
+        // 3. LOGIKA TABEL PEMBAYARAN (Sesuai database kamu)
+        $nama_file = null;
+        if ($request->hasFile('bukti_pembayaran')) {
+            $file = $request->file('bukti_pembayaran');
+            $nama_file = time() . '.' . $file->extension();
+            $file->move(public_path('images'), $nama_file);
+        }
+
+        // Buat data di tabel pembayarans melalui relasi
         $transaksi->pembayaran()->create([
             'waktu_pembayaran' => now(),
             'total' => $totalBayar,
-            'metode' => $request->metode_pembayaran
+            'metode' => $request->metode_pembayaran,
+            'bukti_pembayaran' => $nama_file
         ]);
 
         session()->forget('cart');
-
         return redirect('/history')->with('success', 'Transaksi berhasil!');
     }
 
     public function history()
     {
         $transaksis = Transaksi::where('id_pelanggan', session('id_pelanggan'))
-                        ->with(['detailTransaksi.produk', 'ongkosKirim'])
-                        ->latest()
-                        ->get();
+            ->with(['detailTransaksi.produk', 'ongkosKirim'])
+            ->latest()
+            ->get();
         return view('pelanggan.history', compact('transaksis'));
     }
 }

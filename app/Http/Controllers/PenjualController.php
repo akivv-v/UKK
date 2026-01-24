@@ -13,7 +13,7 @@ class PenjualController extends Controller
         $totalProduk = Produk::count();
         $totalTransaksi = Transaksi::count();
         $pendapatan = Transaksi::where('keterangan', 'selesai')->sum('total_bayar');
-        
+
         return view('penjual.dashboard', compact('totalProduk', 'totalTransaksi', 'pendapatan'));
     }
 
@@ -42,12 +42,14 @@ class PenjualController extends Controller
         $input = $request->all();
 
         if ($request->hasFile('foto_produk')) {
-            $input['foto_produk'] = $request->file('foto_produk')->store('produk', 'public');
+            $file = $request->file('foto_produk');
+            $nama_file = time() . '.' . $file->extension();
+            $file->move(public_path('images'), $nama_file);
+            $input['foto_produk'] = $nama_file;
         }
 
         Produk::create($input);
-
-        return redirect('/admin/produk')->with('success', 'Produk berhasil ditambahkan');
+        return redirect('/admin/produk');
     }
 
     public function editProduk($id)
@@ -59,25 +61,22 @@ class PenjualController extends Controller
     public function updateProduk(Request $request, $id)
     {
         $produk = Produk::findOrFail($id);
-        
-        $request->validate([
-            'nama_produk' => 'required',
-            'harga' => 'required|numeric',
-            'stok' => 'required|numeric',
-            'foto_produk' => 'nullable|image'
-        ]);
-
         $input = $request->all();
 
         if ($request->hasFile('foto_produk')) {
-            $input['foto_produk'] = $request->file('foto_produk')->store('produk', 'public');
-        } else {
-            unset($input['foto_produk']);
+            // Hapus foto lama jika ada
+            if ($produk->foto_produk && file_exists(public_path('images/' . $produk->foto_produk))) {
+                unlink(public_path('images/' . $produk->foto_produk));
+            }
+
+            $file = $request->file('foto_produk');
+            $nama_file = time() . '.' . $file->extension();
+            $file->move(public_path('images'), $nama_file);
+            $input['foto_produk'] = $nama_file;
         }
 
         $produk->update($input);
-
-        return redirect('/admin/produk')->with('success', 'Produk berhasil diupdate');
+        return redirect('/admin/produk');
     }
 
     public function deleteProduk($id)

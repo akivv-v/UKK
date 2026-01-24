@@ -6,7 +6,7 @@
     <div class="col-md-3 mb-4">
         <div class="card h-100">
             @if($produk->foto_produk)
-                <img src="{{ asset('storage/' . $produk->foto_produk) }}" class="card-img-top" alt="{{ $produk->nama_produk }}">
+                <img src="{{ asset('images/' . $produk->foto_produk) }}" class="card-img-top" alt="{{ $produk->nama_produk }}">
             @else
                 <div class="bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 200px;">
                     No Image

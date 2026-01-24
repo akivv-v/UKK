@@ -1,9 +1,8 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="card">
-    <div class="card-header">Edit Produk</div>
-    <div class="card-body">
+    <h3 class="text-center mt-4 fw-bold">Edit Data Barang</h3>
+    <div class="card-body fw-bold">
         <form action="{{ url('/admin/produk/' . $produk->id_produk) }}" method="POST" enctype="multipart/form-data">
             @csrf
             @method('PUT')
@@ -26,8 +25,10 @@
                     <small>Ada foto saat ini</small>
                 @endif
             </div>
-            <button type="submit" class="btn btn-primary">Update</button>
-            <a href="{{ url('/admin/produk') }}" class="btn btn-secondary">Batal</a>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-5">
+            <button type="submit" class="btn btn-danger w-100">Update</button>
+            <a href="{{ url('/admin/produk') }}" class="btn btn-secondary w-100">Batal</a>
+            </div>
         </form>
     </div>
 </div>

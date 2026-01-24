@@ -14,6 +14,12 @@ Route::get('/logout', [AuthController::class, 'logout']);
 
 // Default Redirect
 Route::get('/', function () {
+    if (session('is_login')) {
+        if (session('role') == 'Pembeli') {
+            return redirect('/home');
+        }
+        return redirect('/admin/dashboard');
+    }
     return redirect('/login');
 });
 
