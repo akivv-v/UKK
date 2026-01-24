@@ -13,10 +13,7 @@ class AuthController extends Controller
     public function showLogin()
     {
         if (Session::has('is_login')) {
-            if (Session::get('role') == 'Pembeli') {
-                return redirect('/home');
-            }
-            return redirect('/admin/dashboard');
+            return Session::get('role') == 'Pembeli' ? redirect('/') : redirect('/admin/dashboard');
         }
         return view('auth.login');
     }
@@ -25,42 +22,27 @@ class AuthController extends Controller
     {
         return view('auth.register');
     }
+    public function showRegisterAdmin()
+    {
+        return view('auth.register_admin');
+    }
 
     public function login(Request $request)
     {
-        $request->validate([
-            'username' => 'required',
-            'password' => 'required'
-        ]);
+        $request->validate(['username' => 'required', 'password' => 'required']);
 
-        // Cek Penjual
-        $penjual = Penjual::where('username', $request->username)->first();
-        if ($penjual) {
-            // Check Hash first (Secure)
-            if (Hash::check($request->password, $penjual->password)) {
-                 Session::put('id_user', $penjual->id_user);
-                 Session::put('role', $penjual->role);
-                 Session::put('is_login', true);
-                 return redirect('/admin/dashboard');
-            }
-            // Fallback: Check Plain Text (Simple)
-            elseif ($penjual->password == $request->password) {
-                 Session::put('id_user', $penjual->id_user);
-                 Session::put('role', $penjual->role);
-                 Session::put('is_login', true);
-                 return redirect('/admin/dashboard');
-            }
+        // 1. Cek Penjual (Admin/Pemilik)
+        $user = Penjual::where('username', $request->username)->first();
+        if ($user && Hash::check($request->password, $user->password)) {
+            Session::put(['is_login' => true, 'id_user' => $user->id_user, 'role' => $user->role, 'nama_user' => $user->nama_user]);
+            return redirect('/admin/dashboard');
         }
 
-        // Cek Pelanggan
-        $pelanggan = Pelanggan::where('username', $request->username)->first();
-        if ($pelanggan) {
-            if (Hash::check($request->password, $pelanggan->password)) {
-                Session::put('id_pelanggan', $pelanggan->id_pelanggan);
-                Session::put('role', 'Pembeli');
-                Session::put('is_login', true);
-                return redirect('/');
-            }
+        // 2. Cek Pelanggan (Pembeli)
+        $user = Pelanggan::where('username', $request->username)->first();
+        if ($user && Hash::check($request->password, $user->password)) {
+            Session::put(['is_login' => true, 'id_pelanggan' => $user->id_pelanggan, 'role' => 'Pembeli', 'nama_user' => $user->nama_pelanggan]);
+            return redirect('/');
         }
 
         return back()->with('error', 'Username atau Password salah');
@@ -69,22 +51,43 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $request->validate([
-            'username' => 'required|unique:pelanggans',
+            'username' => 'required|unique:pelanggans|unique:penjuals',
             'password' => 'required',
             'nama_pelanggan' => 'required',
-            'alamat' => 'required',
-            'no_hp' => 'required'
+            'no_hp' => 'required',
+            'alamat' => 'required'
         ]);
 
         Pelanggan::create([
             'username' => $request->username,
             'password' => Hash::make($request->password),
             'nama_pelanggan' => $request->nama_pelanggan,
-            'alamat' => $request->alamat,
-            'no_hp' => $request->no_hp
+            'no_hp' => $request->no_hp,
+            'alamat' => $request->alamat
         ]);
 
-        return redirect('/login')->with('success', 'Registrasi berhasil, silakan login');
+        return redirect('/login')->with('success', 'Daftar Berhasil, Silahkan Login');
+    }
+
+    public function registerAdmin(Request $request)
+    {
+        $request->validate([
+            'username' => 'required|unique:penjuals|unique:pelanggans',
+            'password' => 'required',
+            'nama_penjual' => 'required', 
+            'role' => 'required'
+        ]);
+
+        Penjual::create([
+            'username' => $request->username,
+            'password' => Hash::make($request->password),
+            'nama_user' => $request->nama_penjual, 
+            'no_hp' => $request->no_hp,
+            'alamat' => $request->alamat,
+            'role' => $request->role
+        ]);
+
+        return redirect('/login')->with('success', 'Daftar Admin Berhasil');
     }
 
     public function logout()

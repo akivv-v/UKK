@@ -5,54 +5,48 @@ use App\Http\Controllers\PelangganController;
 use App\Http\Controllers\PenjualController;
 use Illuminate\Support\Facades\Route;
 
-// Auth Routes
+// Halaman Landing (Bisa diakses Guest & Pembeli)
+Route::get('/', [PelangganController::class, 'index'])->name('landing');
+
+// Auth Routes Umum
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
-Route::get('/register', [AuthController::class, 'showRegister']);
-Route::post('/register', [AuthController::class, 'register']);
 Route::get('/logout', [AuthController::class, 'logout']);
 
-// Default Redirect
-Route::get('/', function () {
-    if (session('is_login')) {
-        if (session('role') == 'Pembeli') {
-            return redirect('/home');
-        }
-        return redirect('/admin/dashboard');
-    }
-    return redirect('/login');
-});
+// Registrasi Pembeli
+Route::get('/register', [AuthController::class, 'showRegister']);
+Route::post('/register', [AuthController::class, 'register']);
+
+// Registrasi Admin (Akses via klik title "JabVis")
+Route::get('/register-admin', [AuthController::class, 'showRegisterAdmin']);
+Route::post('/register-admin', [AuthController::class, 'registerAdmin']);
 
 // Penjual / Admin Routes
 Route::group(['prefix' => 'admin', 'middleware' => function ($request, $next) {
-    if (!session('is_login') || session('role') == 'Pembeli') {
-        return redirect('/login');
+    if (!session('is_login') || session('role') != 'Penjual') { // Pastikan hanya Penjual
+        return redirect('/login')->with('error', 'Akses khusus Admin.');
     }
     return $next($request);
 }], function () {
     Route::get('/dashboard', [PenjualController::class, 'dashboard']);
-    
-    // Produk CRUD
     Route::get('/produk', [PenjualController::class, 'indexProduk']);
     Route::get('/produk/create', [PenjualController::class, 'createProduk']);
     Route::post('/produk', [PenjualController::class, 'storeProduk']);
     Route::get('/produk/{id}/edit', [PenjualController::class, 'editProduk']);
     Route::put('/produk/{id}', [PenjualController::class, 'updateProduk']);
     Route::delete('/produk/{id}', [PenjualController::class, 'deleteProduk']);
-
-    // Transaksi
     Route::get('/transaksi', [PenjualController::class, 'indexTransaksi']);
     Route::post('/transaksi/{id}/status', [PenjualController::class, 'updateStatusTransaksi']);
 });
 
-// Pelanggan / Pembeli Routes
+// Pelanggan / Pembeli Authenticated Routes (Harus Login)
 Route::group(['middleware' => function ($request, $next) {
-    if (!session('is_login') || session('role') != 'Pembeli') {
-        return redirect('/login');
+    if (!session('is_login')) {
+        return redirect('/login')->with('error', 'Silahkan login terlebih dahulu.');
     }
     return $next($request);
 }], function () {
-    Route::get('/home', [PelangganController::class, 'index']);
+    Route::get('/home', [PelangganController::class, 'index']); // Sama dengan landing tapi versi login
     Route::get('/produk/{id}', [PelangganController::class, 'showProduk']);
     Route::post('/cart/{id}', [PelangganController::class, 'addToCart']);
     Route::get('/cart', [PelangganController::class, 'showCart']);
