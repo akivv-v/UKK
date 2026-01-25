@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Produk;
 use App\Models\Transaksi;
+use App\Models\OngkosKirim;
+use App\Models\Pembayaran;
 use Illuminate\Http\Request;
 
 class PenjualController extends Controller
@@ -19,9 +21,15 @@ class PenjualController extends Controller
 
     // --- PRODUK ---
 
-    public function indexProduk()
+    public function indexProduk(Request $request)
     {
-        $produks = Produk::all();
+        $query = Produk::query();
+
+        if ($request->has('search')) {
+            $query->where('nama_produk', 'like', '%' . $request->search . '%');
+        }
+
+        $produks = $query->get();
         return view('penjual.produk.index', compact('produks'));
     }
 
@@ -36,6 +44,7 @@ class PenjualController extends Controller
             'nama_produk' => 'required',
             'harga' => 'required|numeric',
             'stok' => 'required|numeric',
+            'deskripsi' => 'nullable',
             'foto_produk' => 'nullable|image'
         ]);
 
@@ -88,9 +97,17 @@ class PenjualController extends Controller
 
     // --- TRANSAKSI ---
 
-    public function indexTransaksi()
+    public function indexTransaksi(Request $request)
     {
-        $transaksis = Transaksi::with(['pelanggan', 'detailTransaksi.produk'])->latest()->get();
+        $query = Transaksi::with(['pelanggan', 'detailTransaksi.produk', 'pembayaran']);
+
+        // Cari berdasarkan tanggal transaksi jika ada input
+        if ($request->has('tanggal') && $request->tanggal != '') {
+            $query->whereDate('tanggaltransaksi', $request->tanggal);
+        }
+
+        $transaksis = $query->latest()->get();
+
         return view('penjual.transaksi.index', compact('transaksis'));
     }
 
@@ -102,5 +119,59 @@ class PenjualController extends Controller
         ]);
 
         return back()->with('success', 'Status transaksi diperbarui');
+    }
+
+    // Tambahkan di bagian atas: use App\Models\Ongkir;
+
+    public function indexOngkir(Request $request)
+    {
+        $query = OngkosKirim::query();
+
+        if ($request->has('search')) {
+            $query->where('daerah', 'like', '%' . $request->search . '%');
+        }
+
+        $ongkirs = $query->get();
+        return view('penjual.ongkir.index', compact('ongkirs'));
+    }
+
+    public function storeOngkir(Request $request)
+    {
+        $request->validate([
+            'daerah' => 'required',
+            'biaya' => 'required|numeric'
+        ]);
+
+        OngkosKirim::create($request->all());
+        return back()->with('success', 'Data ongkir berhasil ditambahkan');
+    }
+
+    public function updateOngkir(Request $request, $id)
+    {
+        $ongkir = OngkosKirim::findOrFail($id);
+        $ongkir->update($request->all());
+        return back()->with('success', 'Data ongkir berhasil diperbarui');
+    }
+
+    public function deleteOngkir($id)
+    {
+        $ongkir = OngkosKirim::findOrFail($id);
+        $ongkir->delete();
+        return back()->with('success', 'Data ongkir berhasil dihapus');
+    }
+
+    public function indexLaporan(Request $request)
+    {
+        $query = Pembayaran::query();
+
+        if ($request->has('metode') && $request->metode != '') {
+            $query->where('metode', $request->metode);
+        }
+
+        $laporans = $query->latest()->get();
+
+        $totalPendapatan = $laporans->sum('total');
+
+        return view('penjual.laporan.index', compact('laporans', 'totalPendapatan'));
     }
 }

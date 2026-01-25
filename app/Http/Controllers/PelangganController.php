@@ -7,7 +7,7 @@ use App\Models\Produk;
 use App\Models\Transaksi;
 use App\Models\OngkosKirim;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\DB; // Tambahkan ini untuk database transaction
 
 class PelangganController extends Controller
 {
@@ -26,6 +26,11 @@ class PelangganController extends Controller
     public function addToCart(Request $request, $id)
     {
         $produk = Produk::findOrFail($id);
+
+        if ($produk->stok <= 0) {
+            return redirect()->back()->with('error', 'Maaf, stok produk sedang habis!');
+        }
+
         $cart = session()->get('cart', []);
 
         if (isset($cart[$id])) {
@@ -43,6 +48,34 @@ class PelangganController extends Controller
         return redirect()->back()->with('success', 'Produk ditambahkan ke keranjang!');
     }
 
+    public function updateCart(Request $request)
+    {
+        if ($request->id && $request->quantity) {
+            $cart = session()->get('cart');
+            $produk = Produk::find($request->id);
+
+            if ($request->quantity > $produk->stok) {
+                return response()->json(['status' => 'error', 'message' => 'Stok tidak mencukupi']);
+            }
+
+            $cart[$request->id]["quantity"] = $request->quantity;
+            session()->put('cart', $cart);
+            return response()->json(['status' => 'success']);
+        }
+    }
+
+    public function removeFromCart(Request $request)
+    {
+        if ($request->id) {
+            $cart = session()->get('cart');
+            if (isset($cart[$request->id])) {
+                unset($cart[$request->id]);
+                session()->put('cart', $cart);
+            }
+            return response()->json(['status' => 'success']);
+        }
+    }
+
     public function showCart()
     {
         $ongkirs = OngkosKirim::all();
@@ -54,67 +87,89 @@ class PelangganController extends Controller
         $request->validate([
             'id_ongkir' => 'required',
             'metode_pembayaran' => 'required',
-            'bukti_pembayaran' => 'nullable|image'
+            'bukti_pembayaran' => 'nullable|image|mimes:jpeg,png,jpg|max:2048'
         ]);
 
         $cart = session('cart');
-        if (!$cart) return back();
+        if (!$cart) return redirect('/home')->with('error', 'Keranjang kosong!');
 
-        // Hitung Total
-        $totalBelanja = 0;
-        foreach ($cart as $details) {
-            $totalBelanja += $details['price'] * $details['quantity'];
-        }
-        $ongkir = OngkosKirim::find($request->id_ongkir);
-        $totalBayar = $totalBelanja + ($ongkir ? $ongkir->biaya : 0);
+        // Gunakan Database Transaction agar jika satu error, semua dibatalkan (lebih aman)
+        DB::beginTransaction();
 
-        // 1. Simpan Transaksi Utama
-        $transaksi = Transaksi::create([
-            'tanggaltransaksi' => now(),
-            'id_pelanggan' => session('id_pelanggan'),
-            'id_ongkir' => $request->id_ongkir,
-            'total_bayar' => $totalBayar,
-            'keterangan' => 'diproses'
-        ]);
+        try {
+            $totalBelanja = 0;
+            foreach ($cart as $details) {
+                $totalBelanja += $details['price'] * $details['quantity'];
+            }
 
-        // 2. Simpan Detail & Kurangi Stok
-        foreach ($cart as $id => $details) {
-            DetailTransaksi::create([
-                'id_transaksi' => $transaksi->id_transaksi,
-                'id_produk' => $id,
-                'harga_produk' => $details['price'],
-                'jumlah_produk' => $details['quantity'],
-                'subtotal' => $details['price'] * $details['quantity']
+            $ongkir = OngkosKirim::findOrFail($request->id_ongkir);
+            $totalBayar = $totalBelanja + $ongkir->biaya;
+
+            // 1. Simpan Transaksi
+            $transaksi = Transaksi::create([
+                'tanggaltransaksi' => now(),
+                'id_pelanggan' => session('id_pelanggan'),
+                'id_ongkir' => $request->id_ongkir,
+                'total_bayar' => $totalBayar,
+                'keterangan' => 'diproses'
             ]);
-            Produk::find($id)->decrement('stok', $details['quantity']);
+
+            // 2. Simpan Detail & Kurangi Stok
+            foreach ($cart as $id => $details) {
+                DetailTransaksi::create([
+                    'id_transaksi' => $transaksi->id_transaksi,
+                    'id_produk' => $id,
+                    'harga_produk' => $details['price'],
+                    'jumlah_produk' => $details['quantity'],
+                    'subtotal' => $details['price'] * $details['quantity']
+                ]);
+
+                Produk::where('id_produk', $id)->decrement('stok', $details['quantity']);
+            }
+
+            // 3. Simpan Pembayaran
+            $nama_file = null;
+            if ($request->hasFile('bukti_pembayaran')) {
+                $file = $request->file('bukti_pembayaran');
+                $nama_file = time() . '_' . session('id_pelanggan') . '.' . $file->extension();
+                $file->move(public_path('images'), $nama_file);
+            }
+
+            $transaksi->pembayaran()->create([
+                'waktu_pembayaran' => now(),
+                'total' => $totalBayar,
+                'metode' => $request->metode_pembayaran,
+                'bukti_pembayaran' => $nama_file
+            ]);
+
+            DB::commit(); 
+            session()->forget('cart');
+
+            return redirect('/invoice/' . $transaksi->id_transaksi);
+        } catch (\Exception $e) {
+            DB::rollback(); 
+            return redirect()->back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
+    }
 
-        // 3. LOGIKA TABEL PEMBAYARAN (Sesuai database kamu)
-        $nama_file = null;
-        if ($request->hasFile('bukti_pembayaran')) {
-            $file = $request->file('bukti_pembayaran');
-            $nama_file = time() . '.' . $file->extension();
-            $file->move(public_path('images'), $nama_file);
-        }
+    // TAMPILKAN INVOICE SETELAH BAYAR
+    public function showInvoice($id)
+    {
+        $transaksi = Transaksi::with(['detailTransaksi.produk', 'ongkosKirim', 'pembayaran'])
+            ->where('id_transaksi', $id)
+            ->where('id_pelanggan', session('id_pelanggan')) 
+            ->firstOrFail();
 
-        // Buat data di tabel pembayarans melalui relasi
-        $transaksi->pembayaran()->create([
-            'waktu_pembayaran' => now(),
-            'total' => $totalBayar,
-            'metode' => $request->metode_pembayaran,
-            'bukti_pembayaran' => $nama_file
-        ]);
-
-        session()->forget('cart');
-        return redirect('/history')->with('success', 'Transaksi berhasil!');
+        return view('pelanggan.invoice', compact('transaksi'));
     }
 
     public function history()
     {
         $transaksis = Transaksi::where('id_pelanggan', session('id_pelanggan'))
-            ->with(['detailTransaksi.produk', 'ongkosKirim'])
+            ->with(['detailTransaksi.produk', 'ongkosKirim', 'pembayaran'])
             ->latest()
             ->get();
+
         return view('pelanggan.history', compact('transaksis'));
     }
 }
