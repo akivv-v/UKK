@@ -161,17 +161,24 @@ class PenjualController extends Controller
     }
 
     public function indexLaporan(Request $request)
-    {
-        $query = Pembayaran::query();
+{
+    $query = Pembayaran::query();
 
-        if ($request->has('metode') && $request->metode != '') {
-            $query->where('metode', $request->metode);
-        }
-
-        $laporans = $query->latest()->get();
-
-        $totalPendapatan = $laporans->sum('total');
-
-        return view('penjual.laporan.index', compact('laporans', 'totalPendapatan'));
+    if ($request->filled('metode')) {
+        $query->where('metode', $request->metode);
     }
+
+    if ($request->filled('tgl_mulai') && $request->filled('tgl_selesai')) {
+        $query->whereBetween('waktu_pembayaran', [$request->tgl_mulai, $request->tgl_selesai]);
+    } elseif ($request->filled('tgl_mulai')) {
+        $query->whereDate('waktu_pembayaran', '>=', $request->tgl_mulai);
+    } elseif ($request->filled('tgl_selesai')) { 
+        $query->whereDate('waktu_pembayaran', '<=', $request->tgl_selesai);
+    }
+
+    $laporans = $query->latest()->get();
+    $totalPendapatan = $laporans->sum('total');
+
+    return view('penjual.laporan.index', compact('laporans', 'totalPendapatan'));
+}
 }

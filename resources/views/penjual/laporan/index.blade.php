@@ -29,6 +29,22 @@
                     <a href="{{ url('/admin/laporan') }}" class="btn btn-outline-secondary w-100">Reset</a>
                 </div>
             </form>
+            <form action="{{ url('/admin/laporan') }}" method="GET" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Filter Tanggal Awal</label>
+                    <input type="date" name="tgl_mulai" class="form-control" value="{{ request('tgl_mulai') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Filter Tanggal Akhir</label>
+                    <input type="date" name="tgl_selesai" class="form-control" value="{{ request('tgl_selesai') }}">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-dark w-100">Cari</button>
+                </div>
+                <div class="col-md-3">
+                    <a href="{{ url('/admin/laporan') }}" class="btn btn-outline-secondary w-100">Reset</a>
+                </div>
+            </form>
         </div>
     </div>
 
